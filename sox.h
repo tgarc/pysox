@@ -6,25 +6,25 @@ Basic typedefs:
 Client API:
 Signed twos-complement 8-bit type. Typically defined as signed char.
 */
-typedef signed... sox_int8_t;
+typedef int... sox_int8_t;
 
 /**
 Client API:
 Unsigned 8-bit type. Typically defined as unsigned char.
 */
-typedef unsigned... sox_uint8_t;
+typedef int... sox_uint8_t;
 
 /**
 Client API:
 Signed twos-complement 16-bit type. Typically defined as short.
 */
-typedef short... sox_int16_t;
+typedef int... sox_int16_t;
 
 /**
 Client API:
 Unsigned 16-bit type. Typically defined as unsigned short.
 */
-typedef unsigned... sox_uint16_t;
+typedef int... sox_uint16_t;
 
 /**
 Client API:
@@ -36,7 +36,7 @@ typedef int... sox_int32_t;
 Client API:
 Unsigned 32-bit type. Typically defined as unsigned int.
 */
-typedef unsigned... sox_uint32_t;
+typedef int... sox_uint32_t;
 
 /**
 Client API:
@@ -48,7 +48,7 @@ typedef int... sox_int64_t;
 Client API:
 Unsigned 64-bit type. Typically defined as unsigned long or unsigned long long.
 */
-typedef int sox_uint64_t;
+typedef int... sox_uint64_t;
 
 /**
 Client API:
@@ -60,7 +60,7 @@ typedef int... sox_int24_t;
 Client API:
 Alias for sox_uint32_t (beware of the extra byte).
 */
-typedef unsigned... sox_uint24_t;
+typedef int... sox_uint24_t;
 
 /**
 Client API:
@@ -362,7 +362,10 @@ typedef int (* sox_flow_effects_callback)(
 /*****************************************************************************
 Structures:
 *****************************************************************************/
-typedef struct sox_globals_t{ ...; } sox_globals_t;
+typedef struct sox_globals_t{ 
+  unsigned verbosity;
+  ...; 
+} sox_globals_t;
 
 typedef struct sox_signalinfo_t {
   sox_rate_t       rate;         /**< samples per second, 0 if unknown */
@@ -440,12 +443,12 @@ struct sox_format_t {
   */
   sox_signalinfo_t signal;
 
-  /* /\** */
-  /* Encoding specifications for reader (decoder) or writer (encoder): */
-  /* encoding (sample format), bits per sample, compression rate, endianness. */
-  /* Should be filled in by startread. Values specified should be used */
-  /* by startwrite when it is configuring the encoding parameters. */
-  /* *\/ */
+  /**
+  Encoding specifications for reader (decoder) or writer (encoder):
+  encoding (sample format), bits per sample, compression rate, endianness.
+  Should be filled in by startread. Values specified should be used
+  by startwrite when it is configuring the encoding parameters.
+  */
   sox_encodinginfo_t encoding;
 
   char             * filetype;      /**< Type of file, as determined by header inspection or libmagic. */
@@ -457,7 +460,7 @@ struct sox_format_t {
   int              sox_errno;       /**< Failure error code */
   char             sox_errstr[256]; /**< Failure error text */
   void             * fp;            /**< File stream pointer */
-  /* lsx_io_type      io_type;         /\**< Stores whether this is a file, pipe or URL *\/ */
+  lsx_io_type      io_type;         /**< Stores whether this is a file, pipe or URL */
   sox_uint64_t     tell_off;        /**< Current offset within file */
   sox_uint64_t     data_start;      /**< Offset at which headers end and sound data begins (set by lsx_check_read_params) */
   sox_format_handler_t handler;     /**< Format handler for this file */
@@ -494,7 +497,7 @@ struct sox_format_handler_t {
   /* sox_format_handler_startwrite startwrite; /\**< called to initialize writer (encoder) *\/ */
   /* sox_format_handler_write write;     /\**< called to write (encode) a block of samples *\/ */
   /* sox_format_handler_stopwrite stopwrite; /\**< called to close writer (decoder); may be null if no closing necessary *\/ */
-  /* sox_format_handler_seek seek;       /\**< called to reposition reader; may be null if not supported *\/ */
+  sox_format_handler_seek seek;       /**< called to reposition reader; may be null if not supported */
 
   /**
   Array of values indicating the encodings and precisions supported for
@@ -574,12 +577,13 @@ struct sox_effect_t {
   sox_uint64_t         clips;         /**< increment if clipping occurs */
   size_t               flows;         /**< 1 if MCHAN, number of chans otherwise */
   size_t               flow;          /**< flow number */
-  void                 * priv;        /**< Effect's private data area (each flow has a separate copy) */
+  /* void                 * priv;        /\**< Effect's private data area (each flow has a separate copy) *\/ */
   /* The following items are private to the libSoX effects chain functions. */
   sox_sample_t             * obuf;    /**< output buffer */
   size_t                   obeg;      /**< output buffer: start of valid data section */
   size_t                   oend;      /**< output buffer: one past valid data section (oend-obeg is length of current content) */
   size_t               imin;          /**< minimum input buffer content required for calling this effect's flow function; set via lsx_effect_set_imin() */
+  ...;
 };
 
 /**
@@ -602,6 +606,13 @@ typedef struct sox_effects_chain_t {
 Functions:
 *****************************************************************************/
 char const *sox_version(void);
+
+/**
+Client API:
+Returns a pointer to the structure with libSoX's global settings.
+@returns a pointer to the structure with libSoX's global settings.
+*/
+sox_globals_t * sox_get_globals(void);
 
 int sox_init(void);
 
@@ -627,6 +638,8 @@ Client API:
 Opens an encoding session for a file. Returned handle must be closed with sox_close().
 @returns The new session handle, or null on failure.
 */
+extern "Python" sox_bool overwrite_permitted(char const * filename);
+
 sox_format_t *
 sox_open_write(
       char               const * path,     /**< Path to file to be written (required). */
@@ -750,7 +763,7 @@ sox_add_effect(
     sox_effects_chain_t * chain, /**< Effects chain to which effect should be added . */
     sox_effect_t * effp, /**< Effect to be added. */
     sox_signalinfo_t * in, /**< Input format. */
-       sox_signalinfo_t const * out /**< Output format. */
+    sox_signalinfo_t const * out /**< Output format. */
     );
 
 /**
@@ -758,6 +771,7 @@ Client API:
 Runs the effects chain, returns SOX_SUCCESS if successful.
 @returns SOX_SUCCESS if successful.
 */
+extern "Python" int _flow_effects_c_callback(sox_bool all_done, void * data);
 int
 sox_flow_effects(
     sox_effects_chain_t * chain, /**< Effects chain to run. */
