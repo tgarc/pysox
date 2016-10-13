@@ -469,19 +469,6 @@ struct sox_format_t {
   ...;
 };
 
-
-/**
-Client API:
-File buffer info.  Holds info so that data can be read in blocks.
-*/
-typedef struct sox_fileinfo_t {
-  char          *buf;                 /**< Pointer to data buffer */
-  size_t        size;                 /**< Size of buffer in bytes */
-  size_t        count;                /**< Count read into buffer */
-  size_t        pos;                  /**< Position in buffer */
-} sox_fileinfo_t;
-
-
 /**
 Client API:
 Handler structure defined by each format.

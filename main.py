@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os, sys
+import numpy as np
 import pysox
 
 
@@ -61,7 +62,7 @@ def main(argv=None):
 
     pysox.set_verbosity(args.verbosity)
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     inpfh = pysox.SoXFile(args.input)
     outfh = pysox.SoXFile(args.output, 'w',
@@ -70,9 +71,11 @@ def main(argv=None):
                           precision=inpfh.precision,
                           filetype=inpfh.filetype)
 
-    sec = pysox.EffectChain(inpfh, outfh)
-    sec.add_effect('vol', '3db')
-    sec.flow()
+    wav = np.frombuffer(inpfh.read(), dtype='i4')
+
+    # sec = pysox.EffectChain(inpfh, outfh)
+    # # sec.add_effect('vol', '3db')
+    # sec.flow()
 
     inpfh.close()
     outfh.close()

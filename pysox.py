@@ -88,7 +88,7 @@ class SoXException(Exception):
 class SoXFileException(Exception):
     def __init__(self, file, msg=''):
         errmsg = "[Error Code %d] %s (%s)" % (file.sox_errno, msg, _ffi.string(file.sox_errstr))
-        super(SoXException, self).__init__(errmsg)
+        super(SoXFileException, self).__init__(errmsg)
 
 def set_verbosity(level):
     glob = _sox.sox_get_globals()
@@ -129,10 +129,12 @@ class SoXFile:
                       length=_ffi.cast("sox_uint64_t", length),
                       mult=_ffi.NULL)
         self._siginf = _ffi.new('sox_signalinfo_t *', siginf)
+        self._closed = False
+        self._buff = _ffi.new("sox_sample_t[2048]")
+        self.name = filename
 
         if 'r' in mode:
-            # self._file = _sox.sox_open_read(filename, self._siginf, _ffi.NULL, filetype or _ffi.NULL)
-            self._file = _sox.sox_open_read(filename, _ffi.NULL, _ffi.NULL, filetype or _ffi.NULL)
+            self._file = _sox.sox_open_read(filename, self._siginf, _ffi.NULL, filetype or _ffi.NULL)
         elif 'w' in mode:
             self._file = _sox.sox_open_write(filename, self._siginf, _ffi.NULL, filetype or _ffi.NULL,
                                              _ffi.NULL, _sox.overwrite_permitted)
@@ -140,7 +142,6 @@ class SoXFile:
         if self._file == _ffi.NULL:
             raise SoXException("Failed to open file '%s'" % filename)
 
-        self.name = filename
 
     @property
     def rate(self):      return self._file.signal.rate
@@ -152,28 +153,48 @@ class SoXFile:
     def precision(self): return self._file.signal.precision
 
     @property
-    def length(self):    return self._file.signal.length
-
-    @property
     def filetype(self):  return _ffi.string(self._file.filetype)
 
     @property
     def mode(self):      return self._file.mode
 
-    def tell(self):      return self._file.tell_off
+    def __len__(self):
+        return int(self._file.signal.length)
+
+    def tell(self):
+        return (self._file.tell_off - self._file.data_start) // (self.precision // 8)
 
     def seek(self, pos):
         if not self._file.seekable:
             raise SoXException("File seek not supported")
-        self._file.seek(pos)
+        
+        retcode = _sox.sox_seek(self._file, pos + self._file.data_start, 0)
+
+        if retcode != 0:
+            raise SoXFileException(self._file, "Seek failed")
+
+    def read(self, frames=-1):
+        framesleft = len(self) - self.tell()
+        if frames < 0:
+            frames = framesleft
+        elif frames > framesleft:
+            frames = framesleft
+
+        buff = _ffi.new("sox_sample_t[%d]" % frames)
+        
+        nsamples = _sox.sox_read(self._file, buff, frames)
+
+        return _ffi.buffer(buff)
 
     def close(self):
+        if self._closed: return
+        self._closed = True
         retcode = _sox.sox_close(self._file)
         if retcode != 0:
             raise SoXException("Failed to close file '%s'" % self.name, retcode)
 
     def __repr__(self):
-        repr = "SoXFile(mode='{0.mode}', rate={0.rate}, channels={0.channels}, length={0.length}, filetype='{0.filetype}')"
+        repr = "SoXFile(mode='{0.mode}', rate={0.rate}, channels={0.channels}, filetype='{0.filetype}')"
         return repr.format(self)
 
     def __del__(self):
@@ -195,8 +216,7 @@ class EffectChain:
         self._sec = _sox.sox_create_effects_chain(_ffi.addressof(self._inpf.encoding),
                                                   _ffi.addressof(self._outf.encoding))
 
-        fstr = _ffi.string(self._inpf.filename)
-        self.add_effect(b'input', [fstr])
+        self.add_effect('input', [_ffi.string(self._inpf.filename)])
 
     def add_effect(self, effect, args=None):
         seh = find_effect(effect)
@@ -212,10 +232,12 @@ class EffectChain:
 
         retcode = _sox.sox_effect_options(se, nargs, argv)
 
-        if retcode != 0:
+        if retcode != nargs:
             raise SoXException("Failed to set parameters for effect '%s'" % effect, retcode)
 
-        retcode = _sox.sox_add_effect(self._sec, se, self._inpf.signal, self._outf.signal)
+        retcode = _sox.sox_add_effect(self._sec, se,
+                                      _ffi.addressof(self._inpf.signal),
+                                      _ffi.addressof(self._outf.signal))
 
         if retcode != 0:
             raise SoXException("Failed to add effect '%s'" % effect, retcode)
